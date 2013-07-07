@@ -25,8 +25,10 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var request = require('request');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var URL_DEFAULT = "http://example.com";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -37,6 +39,11 @@ var assertFileExists = function(infile) {
     }
     return instr;
 };
+
+var assertUrlExists = function(url){
+  return url; 
+  // no checks for now
+}
 
 
 var cheerioHtmlFile = function(htmlfile) {
@@ -49,6 +56,7 @@ var loadChecks = function(checksfile) {
 
 var checkHtmlFile = function(htmlfile, checksfile) {
     $ = cheerioHtmlFile(htmlfile);
+/*
     var checks = loadChecks(checksfile).sort();
     var out = {};
     for(var ii in checks) {
@@ -56,22 +64,50 @@ var checkHtmlFile = function(htmlfile, checksfile) {
         out[checks[ii]] = present;
     }
     return out;
+*/
+    return makeChecks($, checksfile);
 };
+
+var makeChecks = function(parsedHtml, checksfile){
+    var checks = loadChecks(checksfile).sort();
+    var out = {};
+    for(var ii in checks) {
+        var present = parsedHtml(checks[ii]).length > 0;
+        out[checks[ii]] = present;
+    }
+    return out;
+}
+
 
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
     return fn.bind({});
 };
+
+var gotHTML = function(err, resp, html){
+    if(err) return console.error(err);
+    var parsedHtml = cheerio.load(html);
+    //console.log(parsedHtml);
+    console.log(makeChecks(parsedHtml, CHECKSFILE_DEFAULT));
+}
           
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <url>', 'Url to html file.', clone(assertUrlExists), URL_DEFAULT) 
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+    if(program.url === URL_DEFAULT){
+	// grade local file (url is not submitted)
+	var checkJson = checkHtmlFile(program.file, program.checks);
+	var outJson = JSON.stringify(checkJson, null, 4);
+	console.log(outJson);
+    } else {
+	// scrape URL and grade
+	request(program.url, gotHTML);
+    }
+    
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
